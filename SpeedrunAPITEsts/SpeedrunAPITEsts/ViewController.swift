@@ -10,94 +10,108 @@
 
 import UIKit
 
-class ViewController: UIViewController, UISearchBarDelegate{
-    
-    struct Game: Codable {
-        let id: String
-        let names: String
-        let abbreviation: String
-        
-        enum CodingKeys: String, CodingKey {
-            case id
-            case names
-            case abbreviation
-        }
-    }
+class ViewController: UIViewController, UISearchBarDelegate {
+    //MARK: Variable and Outlet Declaration
     @IBOutlet weak var gameSearchBar: UISearchBar!
-    
     @IBOutlet weak var gamesTableView: UITableView!
-    
+    @IBOutlet weak var searchesTableView: UITableView!
     
     var coverArts = [String]()
+    var allGames = [Game]()
     var gameNames = [String]()
-    var gameIds = [String]()
     var searchString = ""
+    var defaults = UserDefaults.standard
+    var recentSearches = [String]()
+    var searchingText: String?
+    var whitespaceMessage = "Please type using non-whitespace characters!"
 
+    
+    
+    //MARK: viewDidLoad()
     override func viewDidLoad() {
         super.viewDidLoad()
+        self.title = "Search"
+        self.navigationController?.navigationBar.shadowImage = UIImage()
+        self.navigationController?.navigationBar.isTranslucent = false
+        self.navigationController?.navigationBar.backgroundColor = UIColor.white
+        gameSearchBar.searchBarStyle = .minimal
+        gameSearchBar.barTintColor = UIColor.white
+        let textField = gameSearchBar.value(forKey: "searchField") as? UITextField
+        textField?.backgroundColor = UIColor(red: 241.0/255.0, green: 241.0/255.0, blue: 243.0/255.0, alpha: 1.0)
         gamesTableView.delegate = self
         gamesTableView.dataSource = self
+        searchesTableView.delegate = self
+        searchesTableView.dataSource = self
         gameSearchBar.delegate = self
-        getGames()
-//        for item in data! {
-//            let assets = item["assets"] as? [String: Any]
-//            let coverMedium = assets!["cover-medium"] as? [String: Any]
-//            self.coverArts.append(coverMedium!["uri"]! as! String)
-//            print(coverMedium!["uri"])
-//        }
-        // Do any additional setup after loading the view, typically from a nib.
+        recentSearches = defaults.array(forKey: "savedSearches") as? [String] ?? [String]()
+        print(recentSearches)
+        gamesTableView.alpha = 0
+        searchesTableView.tableFooterView = UIView()
+//        let tap: UITapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(UIInputViewController.dismissKeyboard))
+//        view.addGestureRecognizer(tap)
+
+    }
+    
+//    @objc
+    func dismissKeyboard() {
+        //Causes the view (or one of its embedded text fields) to resign the first responder status.
+        view.endEditing(true)
     }
 
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
         // Dispose of any resources that can be recreated.
     }
+    
+    
+    //MARK: downloadImageFunction()
+    func downloadImage(_ uri : String, inView: UIImageView){
+        let url = URL(string: uri)
+        let task = URLSession.shared.dataTask(with: url!) {responseData,response,error in
+            if error == nil{
+                if let data = responseData {
+                    DispatchQueue.main.async {
+                        inView.image = UIImage(data: data)
+                    }
+                } else {
+                    print("no data")
+                }
+            }
+        }
+        task.resume()
+    }
+    
+    
+    
+    
+    
+    func animateTable() {
+        gamesTableView.reloadData()
+        
+        let cells = gamesTableView.visibleCells
+        
+        let tableViewWidth = gamesTableView.bounds.size.width
+        
+        for cell in cells {
+            cell.transform = CGAffineTransform(translationX: tableViewWidth, y: 0)
+        }
+        
+        var delayCounter = 0
+        
+        for cell in cells {
+            UIView.animate(withDuration: 0.3, delay: Double(delayCounter) * 0.05, usingSpringWithDamping: 1.0, initialSpringVelocity: 0, options: .curveEaseInOut, animations: {
+                cell.transform = CGAffineTransform.identity
+            }, completion: nil)
+            delayCounter += 1
+        }
+    }
+    
+    
+    
+    
 
     
-    func getGames() {
-        let jsonUrlString = "http://www.speedrun.com/api/v1/games"
-        let jsonUrlStringBulk = "http://www.speedrun.com/api/v1/games?_bulk=yes&max=3000"
-        guard let url = URL(string: jsonUrlStringBulk) else { return }
-        
-        URLSession.shared.dataTask(with: url) {
-            (data, response, error) in
-            
-            guard let data = data else { return }
-            
-            do {
-                let json = try JSONSerialization.jsonObject(with: data, options: .allowFragments) as? [String: Any]
-                let data = json!["data"] as? [[String: Any]]
-                
-                
-                for item in data! {
-                    let id = item["id"] as! String
-                    let names = item["names"] as? [String: Any]
-                    let name = names!["international"] as! String
-                    self.gameNames.append(name)
-                    self.gameIds.append(id)
-                }
-                
-                //                for item in data! {
-                //                    let assets = item["assets"] as? [String: Any]
-                //                    let names = item["names"] as? [String: Any]
-                //                    let coverMedium = assets!["cover-medium"] as? [String: Any]
-                //                    let coverString = coverMedium!["uri"]
-                //                    let nameString = names!["international"]
-                //                    self.coverArts.append(coverString as! String)
-                //                    self.gameNames.append(nameString as! String)
-                //                }
-                
-                
-                DispatchQueue.main.async {
-                    self.gamesTableView.reloadData()
-                }
-                
-                
-            } catch {
-                print(error)
-            }
-            }.resume()
-    }
+    //MARK: Prepare for Segue setup
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         let gameViewController = segue.destination as! GameViewController
         let indexPath: NSIndexPath
@@ -107,71 +121,117 @@ class ViewController: UIViewController, UISearchBarDelegate{
         } else {
             indexPath = sender as! NSIndexPath
         }
-        let gameId = gameIds[indexPath.row]
-        gameViewController.gameId = gameId
+
+        gameViewController.game = allGames[indexPath.row]
+        gameViewController.title = allGames[indexPath.row].names.international
+
     }
-    
-    func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
-        
-    }
-    
-    
-    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
-        coverArts = [String]()
-        gameIds = [String]()
-        gameNames = [String]()
-        var searchText = searchText
-        searchText = searchText.replacingOccurrences(of: " ", with: "%20")
-        print(searchText)
-        let jsonUrlString = "http://www.speedrun.com/api/v1/games?name=" + searchText
-        
-        guard let url = URL(string: jsonUrlString) else { return }
-        
-        URLSession.shared.dataTask(with: url) {
-            (data, response, error) in
-            
-            guard let data = data else { return }
-            
-            do {
-                let json = try JSONSerialization.jsonObject(with: data, options: .allowFragments) as? [String: Any]
-                let data = json!["data"] as? [[String: Any]]
-                
-                
-                for item in data! {
-                    let id = item["id"] as! String
-                    let names = item["names"] as? [String: Any]
-                    let name = names!["international"] as! String
-                    self.gameNames.append(name)
-                    self.gameIds.append(id)
-                }
-                
-                DispatchQueue.main.async {
-                    self.gamesTableView.reloadData()
-                }
-                
-                
-            } catch {
-                print(error)
-            }
-            }.resume()
-        if searchText == "" {
-            coverArts = [String]()
-            gameIds = [String]()
-            gameNames = [String]()
-            getGames()
-        } else {
-            
-        }
-        
-       
-    }
-    
-    
-    
-    
 
 }
 
+
+
+//MARK: Searchbar delegate methods and setup
+extension ViewController {
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        self.searchingText = searchText
+        if searchText == "" {
+            self.gamesTableView.alpha = 0
+            self.searchesTableView.alpha = 1
+        } else {
+            
+        }
+    }
+    
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        self.gamesTableView.alpha = 0
+        self.searchesTableView.alpha = 0
+        guard let searchText = searchingText else { return }
+        
+        for item in recentSearches {
+            if item == searchText {
+                let index = recentSearches.index(of: item) ?? 0
+                recentSearches.remove(at: index)
+                break
+            }
+            
+        }
+        
+        if searchText == "" {
+            let alert = UIAlertController(title: "Invalid Search", message: "Please try again.", preferredStyle: UIAlertControllerStyle.alert)
+            alert.addAction(UIAlertAction(title: "Okay", style: UIAlertActionStyle.default, handler: nil))
+            self.present(alert, animated: true, completion: nil)
+            searchesTableView.alpha = 1
+        } else if searchBar.text?.trimmingCharacters(in: .whitespaces).isEmpty == true {
+            print("Nothing Typed in the field, please try again.")
+            let alert = UIAlertController(title: "Invalid Search", message: "Please try again.", preferredStyle: UIAlertControllerStyle.alert)
+            alert.addAction(UIAlertAction(title: "Okay", style: UIAlertActionStyle.default, handler: nil))
+            self.present(alert, animated: true, completion: nil)
+
+        } else {
+            recentSearches.insert(searchText, at: 0)
+            searchesTableView.reloadData()
+            print(recentSearches)
+            
+            
+            self.searchingText = searchingText!.replacingOccurrences(of: " ", with: "%20")
+            print(searchText)
+            let jsonUrlString = "http://www.speedrun.com/api/v1/games?name=" + searchingText! + "&embed=categories,platforms,variables"
+            
+            guard let url = URL(string: jsonUrlString) else { return }
+            
+            let dataRequest = URLSession.shared.dataTask(with: url) { (data, reponse, error) in
+                guard let data = data else { return }
+                
+                let gamesData = try? JSONDecoder().decode(GamesResponse.self, from: data)
+                if let games = gamesData?.data {
+                    //                print(games)
+                    DispatchQueue.main.async {
+                        self.allGames = games
+                    }
+                    for game in games {
+                        //                    print(game.id)
+//                        if let categoriesResponse = game.categories {
+//                            for category in categoriesResponse.data {
+//                                //                            self.getVariables(category: category, game: game)
+//                            }
+//                        }
+                        
+                    }
+                }
+                DispatchQueue.main.async {
+                    self.gamesTableView.alpha = 1
+                    self.animateTable()
+                    self.dismissKeyboard()
+                    
+                }
+                
+            }
+            dataRequest.resume()
+        }
+
+        
+        
+        
+        
+        if recentSearches.count > 6 {
+            recentSearches.remove(at: recentSearches.count - 1)
+            searchesTableView.reloadData()
+            defaults.set(recentSearches, forKey: "savedSearches")
+        } else {
+            defaults.set(recentSearches, forKey: "savedSearches")
+        }
+
+        
+    }
+}
+
+
+
+
+
+
+//MARK: Tableview delegate methods and setup
 extension ViewController: UITableViewDelegate, UITableViewDataSource {
     func numberOfSections(in tableView: UITableView) -> Int {
         return 1
@@ -179,16 +239,56 @@ extension ViewController: UITableViewDelegate, UITableViewDataSource {
     
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return gameNames.count
+        if tableView == self.gamesTableView {
+             return allGames.count
+        } else {
+            return recentSearches.count
+        }
+       
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath)
-        cell.textLabel?.text = gameNames[indexPath.row]
-        return cell
+        if tableView == self.gamesTableView {
+            let gamesCell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath) as? CustomGamesTableViewCell
+            gamesCell?.gameNameLabel.text = allGames[indexPath.row].names.international
+            downloadImage(allGames[indexPath.row].assets.coverMedium.uri, inView: (gamesCell?.gameCoverImageView)!)
+            return gamesCell! 
+        } else {
+            let searchCell = tableView.dequeueReusableCell(withIdentifier: "SearchCell", for: indexPath)
+            if recentSearches.count == 0 {
+                searchCell.textLabel?.text = "No Recent Searches"
+            } else {
+                searchCell.textLabel?.text = recentSearches[indexPath.row]
+            }
+            return searchCell
+        }
     }
     
     
+    func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView, forSection section: Int){
+        if tableView == searchesTableView {
+            view.tintColor = UIColor.white
+            let header = view as! UITableViewHeaderFooterView
+            header.textLabel?.textColor = UIColor.darkText
+        }
+  
+    }
+    
+    
+    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        if tableView == self.searchesTableView {
+            return "Recent Searches"
+        }
+        return nil
+    }
+    
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        if tableView == self.searchesTableView {
+            gameSearchBar.text = recentSearches[indexPath.row]
+            searchingText = recentSearches[indexPath.row]
+            searchBarSearchButtonClicked(gameSearchBar)
+        }
+    }
 }
 
 
